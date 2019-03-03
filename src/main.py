@@ -1,17 +1,12 @@
 #! /usr/bin/env python3.7
-import random
 import typing
-import configparser
-from io import StringIO
-import os
 import socket
-import dataclasses
 import logging
-import aioprocessing  # sudo python3.7 -m pip install aioprocessing; # https://github.com/dano/aioprocessing
 import asyncio
+import aioprocessing  # sudo python3.7 -m pip install aioprocessing; # https://github.com/dano/aioprocessing
 
-import worker
-
+from src import worker
+from src import config as conf
 
 # пример для ускорения. https://github.com/jpyatachkov/ssanic
 
@@ -20,17 +15,12 @@ import worker
 # модули: парсинг запроса
 # записывание файла
 
-@dataclasses.dataclass
-class Config:
-    cpu_limit: int  # maximum CPU count to use for non-blocking servers
-    document_root: str  # folder for site root
-    port: int  # listen tcp port
 
 
 class MasterProcess:
     __slots__ = ['workers', 'socket_queue', 'config', 'listen_socket', 'logger', 'time_to_stop']
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: conf.Config) -> None:
         self.config = config
         self.socket_queue = aioprocessing.AioQueue()  # конструктор необходимо вызывать внутри asyncio.run()
         self.workers: typing.List[typing.Tuple[aioprocessing.AioQueue, int]] = list()
@@ -43,7 +33,7 @@ class MasterProcess:
         Функция, принимающая соединения но одному, отдаёт принятые соединения worker'ам.
         :return:
         """
-        while True:  # TODO: придумать корректное завершение.
+        while True:  # TODO: придумать корректное завершение всех процессов. (Принципиально ли это в docker?)
             loop = asyncio.get_event_loop()  # текущая запущенная loop
             new_socket: socket.socket; host: str; port: int
             new_socket, (host, port) = await loop.sock_accept(self.listen_socket)
@@ -58,7 +48,8 @@ class MasterProcess:
 
         # запуск worker'ов.
         for worker_id in range(self.config.cpu_limit):
-            new_process = aioprocessing.AioProcess(target=worker.new_worker, args=(self.socket_queue, worker_id))
+            new_process = aioprocessing.AioProcess(target=worker.new_worker,
+                                                   args=(self.socket_queue, worker_id, self.config))
             self.workers.append((new_process, worker_id))
             new_process.start()
 
@@ -66,33 +57,21 @@ class MasterProcess:
         self.listen_socket.close()
 
 
-def parse_config(config_path: str = '/etc/httpd.conf') -> Config:
-    with StringIO() as fullConfig, open(config_path) as realConfig:
-        fullConfig.write('[main_section]\n')
-        fullConfig.write(realConfig.read())
-        fullConfig.seek(0, os.SEEK_SET)
-        parsed_config = configparser.ConfigParser(
-            defaults={
-                "cpu_limit": "4",  # maximum CPU count to use for non-blocking servers
-                "document_root": "/var/www/html",
-                "port": str(random.randint(2000, 4000))  # TODO: по условиям сборки порт по умолчанию 80.
-            },
-            comment_prefixes=('#',),
-            delimiters=(' ',),
-            inline_comment_prefixes=('#',))
-        parsed_config.read_file(fullConfig)
-    cpu_limit = parsed_config.getint("main_section", "cpu_limit")
-    document_root = parsed_config.get("main_section", "document_root")
-    port = parsed_config.getint("main_section", "port")
-    return Config(cpu_limit=cpu_limit, document_root=document_root, port=port)
+def main(debug: typing.Optional[bool]) -> None:
+    if debug in [True, None]:
+        config_path = "/home/oleg/PyCharmProjects/http-server/httpd.conf"
+    else:
+        config_path = "/etc/httpd.conf"
 
+    config = conf.Config(config_path)
 
-async def main() -> None:
-    config = parse_config("/home/oleg/PyCharmProjects/http-server/httpd.conf")
+    if debug is not None:
+        config.debug = debug
+
+    if config.debug:
+        config.port = 8080
+        config.document_root = '/home/oleg/PyCharmProjects/http-server/http-test-suite'
+
     master = MasterProcess(config)
-    print("start listen on port", config.port)
-    await master.run()
-
-
-if __name__ == '__main__':
-    asyncio.run(main(), debug=True)
+    print(f'start listen on port {config.port} in {"debug" if config.debug else "realise"} mod.')
+    asyncio.run(master.run(), debug=debug)

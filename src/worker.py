@@ -5,42 +5,39 @@ import socket
 import logging
 import aioprocessing  # sudo python3.7 -m pip install aioprocessing; # https://github.com/dano/aioprocessing
 
-from src import parser
+from src import config as conf
+from src import http_parser
+from src import http_response_builder
 
 
-def new_worker(connection_source: aioprocessing.AioQueue, worker_id: int):
+
+def new_worker(connection_source: aioprocessing.AioQueue, worker_id: int, config: conf.Config):
     """
     Фабричная функция для запуска Worker в новом потоке.
     """
-    worker = Worker(connection_source, worker_id)
+    worker = Worker(connection_source, worker_id, config)
     asyncio.run(worker.listen_and_serve(), debug=True)
 
 
 class Worker:
-    __slots__ = ['connection_source', 'worker_id', 'logger']
+    __slots__ = ['connection_source', 'worker_id', 'logger', 'config']
 
-    def __init__(self, connection_source: aioprocessing.AioQueue, worker_id: int):
+    def __init__(self, connection_source: aioprocessing.AioQueue, worker_id: int, config: conf.Config):
         self.connection_source = connection_source
         self.worker_id = worker_id
         self.logger = logging
+        self.config = config
 
     async def serve_connection(self, served_socket: socket.socket) -> None:
         # потоковое чтение запроса из сокета
-        print(await parser.parser(served_socket))
-
-        # await self.loop.sock_recv(served_socket, nbytes=2048)
-        head = b"HTTP/1.1 200 OK\r\n" \
-               b"Content-Type: text/plain; charset=utf-8\r\n" \
-               b"\r\n"
-        await asyncio.get_event_loop().sock_sendall(served_socket, data=head)
-        with open("/home/oleg/PyCharmProjects/http-server/worker.py", mode='rb') as file:
-            loop = asyncio.get_event_loop()
-            # Едиственный пример использования sock_sendfile есть в тестах интерпретатора:
-            # https://github.com/python/cpython/commit/6b5a27975a415108a5eac12ee302bf2b3233f4d4
-            # Это обёртка вокруг системного вызова, возлагающего все заботы на OS: $ man 2 sendfile;
-            await loop.sock_sendfile(sock=served_socket, file=file)
-        served_socket.shutdown(socket.SHUT_RDWR)  # Закрытие tcp соединения, а не файлового дескриптора.
-        served_socket.close()
+        try:
+            request_headers = await http_parser.parser(served_socket)
+        except http_parser.ConnectionLost:
+            pass
+        else:
+            await http_response_builder.serve_request(request_headers, served_socket, self.config)
+            served_socket.shutdown(socket.SHUT_RDWR)  # Закрытие tcp соединения, а не файлового дескриптора.
+        served_socket.close()  # Закрытие файлового дескриптора.
 
     async def listen_and_serve(self):
         while True:

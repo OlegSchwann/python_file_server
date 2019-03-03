@@ -3,7 +3,7 @@ import socket
 import asyncio
 
 
-class ParserError(Exception):
+class ConnectionLost(Exception):
     pass
 
 
@@ -12,6 +12,8 @@ async def __buffer_provider(read_socket: socket.socket):  # -> collections.Async
     loop = asyncio.get_event_loop()
     while True:
         buffer = await loop.sock_recv(read_socket, 2024)
+        if len(buffer) == 0:  # если соединение отвалилось.
+            raise ConnectionLost("Socket close without FIN flag.")
         yield buffer
 
 
@@ -23,7 +25,7 @@ async def __byte_provider(read_socket: socket.socket):  # -> collections.AsyncGe
 
 
 # Парсит поток байт в строки, завершает при нахождении разделителя http-header http-body "\r\n\r\n".
-# FIXME: Функция отбрасывает body. (По условию задачи его не болжно быть, но вдруг понадобится.)
+# Функция отбрасывает body запроса. (По условию задачи его не болжно быть, но вдруг понадобится.)
 async def __lines_provider(read_socket: socket.socket) -> typing.List[bytearray]:
     header_lines: typing.List[bytearray] = []
     current_line = bytearray()
@@ -117,7 +119,6 @@ headers = typing.Dict[str, str]
 #     'User-Agent': 'Mozilla/5.0'
 # }
 async def parser(read_socket: socket.socket) -> typing.Dict[str, str]:
-    # TODO: Понять, какие возможны ошибки и перехватывать их.
     header_lines = await __lines_provider(read_socket)
     header = __first_line_parser(header_lines[0])
     header.update(__key_value_line_parser(header_lines[1:-1]))

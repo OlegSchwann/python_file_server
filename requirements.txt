@@ -1,2 +1,1 @@
 aioprocessing==1.0.1 # https://github.com/dano/aioprocessing
-uvloop==0.12.1 # https://github.com/MagicStack/uvloop , need gcc for installation.

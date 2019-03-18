@@ -1,8 +1,6 @@
 FROM python:3.7.2-alpine3.9
 
-# Install project dependencies:
-# gcc for compile uvloop.
-RUN apk update && apk add build-base;
+
 # real libraries
 COPY ./requirements.txt /usr/local/python/http-server/
 RUN ["/usr/local/bin/pip", "install", "--requirement", "/usr/local/python/http-server/requirements.txt"]

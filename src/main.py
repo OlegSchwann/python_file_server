@@ -3,13 +3,10 @@ import typing
 import socket
 import logging
 import asyncio
-import uvloop  # sudo python3.7 -m pip install uvloop; # on ImportError
 import aioprocessing  # sudo python3.7 -m pip install aioprocessing; # on ImportError
 
 from src import worker
 from src import config as conf
-
-uvloop.install()
 
 
 class MasterProcess:

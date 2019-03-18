@@ -1,22 +1,22 @@
 FROM python:3.7.2-alpine3.9
 
-MAINTAINER OlegSchwann
-
-# Статика для тестирования.
-COPY ./http-test-suite/httptest /var/www/html/httptest
-
-# Зависимости проекта
+# Install project dependencies:
+# gcc for compile uvloop.
+RUN apk update && apk add build-base;
+# real libraries
 COPY ./requirements.txt /usr/local/python/http-server/
-RUN pip install --requirement '/usr/local/python/http-server/requirements.txt'
+RUN ["/usr/local/bin/pip", "install", "--requirement", "/usr/local/python/http-server/requirements.txt"]
 
-# Исходный код проекта
+# Исходный код проекта.
 COPY ./main.py /usr/local/python/http-server/
 COPY ./src /usr/local/python/http-server/src
-COPY ./httpd.conf /etc/httpd.conf
 
 # Порт, на котором слушает сервер.
-EXPOSE 80/tcp
+EXPOSE 80
 
-WORKDIR '/usr/local/python/http-server'
+# Место расположение конфига и папки со статикой.
+VOLUME ["/etc/httpd.conf", "/var/www/html"]
+
+WORKDIR "/usr/local/python/http-server"
 
 CMD ["/usr/local/bin/python3", "./main.py", "--release"]

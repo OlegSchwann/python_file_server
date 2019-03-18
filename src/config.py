@@ -5,10 +5,11 @@ from io import StringIO
 
 class Config:
     __slots__ = [
-        'cpu_limit',  # Maximum CPU count to use for non-blocking servers. Default 4.
-        'document_root',  # Folder for site root.                              Default "/var/www/html".
-        'port',  # Listen tcp port.                                   Default 80.
-        'debug'  # Is debug configuration.                            Default True.
+        # parameter name    description                                         default
+        'cpu_limit',      # Maximum CPU count to use for non-blocking servers.  4
+        'document_root',  # Folder for site root.                               "/var/www/html".
+        'port',           # Listen tcp port.                                    80
+        'debug'           # Is debug configuration.                             True
     ]
 
     def __init__(self, path: str = '/etc/httpd.conf'):
@@ -21,7 +22,7 @@ class Config:
                     "cpu_limit": "4",
                     "document_root": "/var/www/html",
                     "port": "80",
-                    "debug": True
+                    "debug": "True"
                 },
                 comment_prefixes=('#',),
                 delimiters=(' ',),

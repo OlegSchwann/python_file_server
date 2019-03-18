@@ -3,18 +3,13 @@ import typing
 import socket
 import logging
 import asyncio
-import aioprocessing  # sudo python3.7 -m pip install aioprocessing; # https://github.com/dano/aioprocessing
+import uvloop  # sudo python3.7 -m pip install uvloop; # on ImportError
+import aioprocessing  # sudo python3.7 -m pip install aioprocessing; # on ImportError
 
 from src import worker
 from src import config as conf
 
-# пример для ускорения. https://github.com/jpyatachkov/ssanic
-
-# открываем сокет
-# Запуск асинхронных workers.
-# модули: парсинг запроса
-# записывание файла
-
+uvloop.install()
 
 
 class MasterProcess:
@@ -35,7 +30,9 @@ class MasterProcess:
         """
         while True:  # TODO: придумать корректное завершение всех процессов. (Принципиально ли это в docker?)
             loop = asyncio.get_event_loop()  # текущая запущенная loop
-            new_socket: socket.socket; host: str; port: int
+            new_socket: socket.socket;
+            host: str;
+            port: int
             new_socket, (host, port) = await loop.sock_accept(self.listen_socket)
             self.logger.info(f'New connection accepted from {host}:{port}.')
             await self.socket_queue.coro_put(new_socket)

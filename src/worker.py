@@ -1,46 +1,40 @@
-# https://steelkiwi.com/blog/working-tcp-sockets/
-
 import asyncio
 import socket
-import logging
-import aioprocessing  # sudo python3.7 -m pip install aioprocessing; # https://github.com/dano/aioprocessing
+import uvloop
+import src.http_parser as http_parser
+import src.http_response_builder as http_response_builder
 
-from src import config as conf
-from src import http_parser
-from src import http_response_builder
+import src.config as conf
 
+_CHUNK_SIZE = 262144
 
-
-def new_worker(connection_source: aioprocessing.AioQueue, worker_id: int, config: conf.Config):
-    """
-    Фабричная функция для запуска Worker в новом потоке.
-    """
-    worker = Worker(connection_source, worker_id, config)
-    asyncio.run(worker.listen_and_serve(), debug=True)
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 class Worker:
-    __slots__ = ['connection_source', 'worker_id', 'logger', 'config']
+    __slots__ = ['listen_socket', 'config', 'loop']
 
-    def __init__(self, connection_source: aioprocessing.AioQueue, worker_id: int, config: conf.Config):
-        self.connection_source = connection_source
-        self.worker_id = worker_id
-        self.logger = logging
+    def __init__(self, listen_socket: socket.socket, config: conf.Config) -> None:
+        self.listen_socket = listen_socket
         self.config = config
+        self.loop = uvloop.new_event_loop()
+        asyncio.set_event_loop(self.loop)
 
-    async def serve_connection(self, served_socket: socket.socket) -> None:
+    def run(self) -> None:
+        self.loop.run_until_complete(self._run_worker())
+
+    async def _run_worker(self):
+        while True:
+            conn, _ = await self.loop.sock_accept(self.listen_socket)
+            conn.settimeout(5)
+            self.loop.create_task(self.handle_connection(conn))
+
+    async def handle_connection(self, handle_socket: socket.socket) -> None:
         # потоковое чтение запроса из сокета
         try:
-            request_headers = await http_parser.parser(served_socket)
+            request_headers = await http_parser.parser(handle_socket)
         except http_parser.ConnectionLost:
             pass
         else:
-            await http_response_builder.serve_request(request_headers, served_socket, self.config)
-            served_socket.shutdown(socket.SHUT_RDWR)  # Закрытие tcp соединения, а не файлового дескриптора.
-        served_socket.close()  # Закрытие файлового дескриптора.
-
-    async def listen_and_serve(self):
-        while True:
-            new_socket: socket.socket = await self.connection_source.coro_get()
-            new_socket.setblocking(False)
-            await asyncio.get_event_loop().create_task(self.serve_connection(new_socket))
+            await http_response_builder.serve_request(request_headers, handle_socket, self.config)
+        handle_socket.close()

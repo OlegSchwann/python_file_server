@@ -72,6 +72,9 @@ async def serve_head_request(request_headers: parser.headers, connection: socket
     await loop.sock_sendall(connection, data=bytes(str(headers), encoding='utf-8'))
 
 
+_CHUNK_SIZE = 262144
+
+
 async def serve_get_request(request_headers: parser.headers, served_socket: socket.socket, config: conf.Config) -> None:
     headers = ResponseHeaders()
     request_headers['Domain'], _ = search_file.path_converter(request_headers['Domain'], config.document_root)
@@ -82,10 +85,8 @@ async def serve_get_request(request_headers: parser.headers, served_socket: sock
         })
         loop = asyncio.get_event_loop()
         await loop.sock_sendall(served_socket, data=bytes(str(headers), encoding='utf-8'))
-        # Едиственный пример использования sock_sendfile есть в тестах интерпретатора:
-        # https://github.com/python/cpython/commit/6b5a27975a415108a5eac12ee302bf2b3233f4d4
-        # Это обёртка вокруг системного вызова, возлагающего все заботы на OS: $ man 2 sendfile;
-        await loop.sock_sendfile(sock=served_socket, file=target_file)
+        for chunk in iter(lambda: target_file.read(_CHUNK_SIZE), b''):
+            await loop.sock_sendall(served_socket, chunk)
 
 
 async def serve_method_not_allowed_request(request_headers: parser.headers, connection: socket.socket,
